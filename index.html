@@ -3,87 +3,98 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Clasificador de Moda - IA</title>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            text-align: center;
-            background-color: #f4f4f4;
-            padding: 20px;
-        }
-        h1 {
-            color: #333;
-        }
-        button {
-            padding: 10px 20px;
-            font-size: 16px;
-            background-color: #007bff;
-            color: white;
-            border: none;
-            cursor: pointer;
-            margin: 20px;
-        }
-        button:hover {
-            background-color: #0056b3;
-        }
-        #webcam-container {
-            margin-top: 20px;
-        }
-        #label-container {
-            margin-top: 20px;
-            font-size: 18px;
-            font-weight: bold;
-        }
-    </style>
+    <title>Clasificador de Moda - IA con p5.js</title>
+    <script src="https://cdn.jsdelivr.net/npm/p5@latest/lib/p5.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/ml5@latest/dist/ml5.min.js"></script>
 </head>
 <body>
     <h1>Clasificador de Moda con IA</h1>
-    <p>Usa tu cámara para detectar prendas de moda en tiempo real.</p>
-    
-    <button type="button" onclick="init()">Iniciar Clasificación</button>
-    
-    <div id="webcam-container"></div>
-    <div id="label-container"></div>
+    <p>Usa la cámara o sube una imagen para detectar prendas de moda.</p>
+
+    <input type="file" accept="image/*" onchange="handleImageUpload(event)">
+    <br><br>
+    <div id="canvas-container"></div>
+    <p id="result-label">Cargando modelo...</p>
 
     <script>
-        const URL = "https://teachablemachine.withgoogle.com/models/PWJnkriky/";
-        let model, webcam, labelContainer, maxPredictions;
+        let classifier;
+        let imageModelURL = "https://teachablemachine.withgoogle.com/models/PWJnkriky/";
 
-        async function init() {
-            const modelURL = URL + "model.json";
-            const metadataURL = URL + "metadata.json";
+        let video;
+        let label = "Esperando...";
+        let img = null; // Imagen cargada
+        let modelLoaded = false; // Para verificar que el modelo está listo
 
-            model = await tmImage.load(modelURL, metadataURL);
-            maxPredictions = model.getTotalClasses();
+        function preload() {
+            console.log("Cargando modelo...");
+            classifier = ml5.imageClassifier(imageModelURL + "model.json", function() {
+                console.log("Modelo cargado.");
+                modelLoaded = true;
+                document.getElementById("result-label").innerText = "Modelo listo. Usa la cámara o sube una imagen.";
+                classifyVideo();
+            });
+        }
 
-            const flip = true;
-            webcam = new tmImage.Webcam(300, 300, flip);
-            await webcam.setup();
-            await webcam.play();
-            window.requestAnimationFrame(loop);
+        function setup() {
+            let canvas = createCanvas(320, 260);
+            canvas.parent("canvas-container");
 
-            document.getElementById("webcam-container").appendChild(webcam.canvas);
-            labelContainer = document.getElementById("label-container");
-            labelContainer.innerHTML = "";
-            for (let i = 0; i < maxPredictions; i++) {
-                labelContainer.appendChild(document.createElement("div"));
+            video = createCapture(VIDEO);
+            video.size(320, 240);
+            video.hide();
+        }
+
+        function draw() {
+            background(0);
+            if (img) {
+                image(img, 0, 0, width, height);
+            } else {
+                image(video, 0, 0);
             }
+            
+            fill(255);
+            textSize(16);
+            textAlign(CENTER);
+            text(label, width / 2, height - 10);
         }
 
-        async function loop() {
-            webcam.update();
-            await predict();
-            window.requestAnimationFrame(loop);
+        function classifyVideo() {
+            if (!modelLoaded) return; // Esperar a que el modelo cargue
+            classifier.classify(video, gotResult);
         }
 
-        async function predict() {
-            const prediction = await model.predict(webcam.canvas);
-            for (let i = 0; i < maxPredictions; i++) {
-                const classPrediction =
-                    prediction[i].className + ": " + (prediction[i].probability * 100).toFixed(2) + "%";
-                labelContainer.childNodes[i].innerHTML = classPrediction;
+        function gotResult(error, results) {
+            if (error) {
+                console.error("Error en la predicción:", error);
+                return;
+            }
+            label = results[0].label;
+            document.getElementById("result-label").innerText = "Resultado: " + label;
+            classifyVideo(); // Volver a predecir en el video
+        }
+
+        function handleImageUpload(event) {
+            if (!modelLoaded) {
+                alert("Espera a que el modelo termine de cargar.");
+                return;
+            }
+
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function (e) {
+                    img = loadImage(e.target.result, function () {
+                        classifier.classify(img, function (error, results) {
+                            if (error) {
+                                console.error("Error en la predicción de la imagen:", error);
+                                return;
+                            }
+                            label = results[0].label;
+                            document.getElementById("result-label").innerText = "Resultado: " + label;
+                        });
+                    });
+                };
+                reader.readAsDataURL(file);
             }
         }
     </script>

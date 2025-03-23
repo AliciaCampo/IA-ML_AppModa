@@ -1,0 +1,31 @@
+body {
+    font-family: Arial, sans-serif;
+    text-align: center;
+    background-color: #f4f4f4;
+    padding: 20px;
+}
+
+h1 {
+    color: #333;
+}
+
+button, input {
+    padding: 10px;
+    font-size: 16px;
+    margin: 10px;
+}
+
+#webcam-container, #image-container {
+    margin-top: 20px;
+}
+
+#image-container img {
+    max-width: 300px;
+    margin-top: 10px;
+}
+
+#label-container {
+    margin-top: 20px;
+    font-size: 18px;
+    font-weight: bold;
+}
