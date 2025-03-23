@@ -3,9 +3,55 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Clasificador de Moda - IA con p5.js</title>
+    <title>Clasificador de Moda con IA</title>
     <script src="https://cdn.jsdelivr.net/npm/p5@latest/lib/p5.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/ml5@latest/dist/ml5.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            background-color: #f4f4f4;
+            padding: 20px;
+            margin: 0;
+        }
+        h1 {
+            color: #333;
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+        p {
+            color: #666;
+            font-size: 1.1em;
+        }
+        #canvas-container {
+            margin: 20px auto;
+            border: 2px solid #333;
+            border-radius: 5px;
+            display: inline-block;
+            background-color: #fff;
+        }
+        #result-label {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #2a9d8f;
+            margin-top: 20px;
+            background-color: #e9f5f4;
+            padding: 10px;
+            border-radius: 5px;
+            display: inline-block;
+        }
+        input[type="file"] {
+            padding: 10px;
+            font-size: 1em;
+            background-color: #fff;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        input[type="file"]:hover {
+            background-color: #f0f0f0;
+        }
+    </style>
 </head>
 <body>
     <h1>Clasificador de Moda con IA</h1>
@@ -18,85 +64,125 @@
 
     <script>
         let classifier;
-        let imageModelURL = "https://teachablemachine.withgoogle.com/models/PWJnkriky/";
-
+        const imageModelURL = "https://teachablemachine.withgoogle.com/models/PWJnkriky/";
         let video;
         let label = "Esperando...";
-        let img = null; // Imagen cargada
-        let modelLoaded = false; // Para verificar que el modelo está listo
+        let img = null;
+        let modelLoaded = false;
+        let videoStarted = false;
 
+        // Cargar el modelo antes de que comience el sketch
         function preload() {
             console.log("Cargando modelo...");
-            classifier = ml5.imageClassifier(imageModelURL + "model.json", function() {
-                console.log("Modelo cargado.");
+            classifier = ml5.imageClassifier(imageModelURL + "model.json", () => {
+                console.log("✅ Modelo cargado correctamente.");
                 modelLoaded = true;
                 document.getElementById("result-label").innerText = "Modelo listo. Usa la cámara o sube una imagen.";
-                classifyVideo();
+                startVideo();
             });
         }
 
+        // Configurar el canvas y la cámara
         function setup() {
             let canvas = createCanvas(320, 260);
             canvas.parent("canvas-container");
 
-            video = createCapture(VIDEO);
+            video = createCapture(VIDEO, () => {
+                console.log("✅ Cámara activada.");
+                videoStarted = true;
+            });
             video.size(320, 240);
             video.hide();
         }
 
+        // Dibujar en el canvas
         function draw() {
             background(0);
             if (img) {
                 image(img, 0, 0, width, height);
-            } else {
-                image(video, 0, 0);
+            } else if (videoStarted) {
+                image(video, 0, 0, width, height);
             }
-            
             fill(255);
             textSize(16);
             textAlign(CENTER);
             text(label, width / 2, height - 10);
         }
 
+        // Iniciar la clasificación con la cámara
+        function startVideo() {
+            if (!modelLoaded || !videoStarted) {
+                console.warn("⚠️ El modelo o la cámara aún no están listos. Reintentando en 1 segundo...");
+                setTimeout(startVideo, 1000); // Reintentar después de 1 segundo
+                return;
+            }
+            console.log("📷 Iniciando clasificación de video...");
+            classifyVideo();
+        }
+
+        // Clasificar el video en bucle
         function classifyVideo() {
-            if (!modelLoaded) return; // Esperar a que el modelo cargue
-            classifier.classify(video, gotResult);
+    if (!modelLoaded || !videoStarted) {
+        console.warn("⏳ Esperando que la cámara esté lista...");
+        setTimeout(classifyVideo, 1000);
+        return;
+    }
+    classifier.classify(video, (param1, param2) => {
+        let error, results;
+        if (Array.isArray(param1)) {
+            results = param1; // El primer parámetro es el array de resultados
+            error = null;
+        } else {
+            error = param1;   // El primer parámetro es un error
+            results = param2; // El segundo parámetro serían los resultados (si los hay)
         }
-
-        function gotResult(error, results) {
-            if (error) {
-                console.error("Error en la predicción:", error);
-                return;
-            }
-            label = results[0].label;
-            document.getElementById("result-label").innerText = "Resultado: " + label;
-            classifyVideo(); // Volver a predecir en el video
+        if (error) {
+            console.error("❌ Error en la predicción del video:", error);
+            return;
         }
+        let bestPrediction = results[0];
+        label = `${bestPrediction.label} - ${(bestPrediction.confidence * 100).toFixed(2)}%`;
+        document.getElementById("result-label").innerText = "Resultado: " + label;
+        setTimeout(classifyVideo, 500); // Clasificar cada 500ms
+    });
+}
 
+        // Manejar la subida de imágenes
         function handleImageUpload(event) {
-            if (!modelLoaded) {
-                alert("Espera a que el modelo termine de cargar.");
-                return;
-            }
-
-            const file = event.target.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = function (e) {
-                    img = loadImage(e.target.result, function () {
-                        classifier.classify(img, function (error, results) {
-                            if (error) {
-                                console.error("Error en la predicción de la imagen:", error);
-                                return;
-                            }
-                            label = results[0].label;
-                            document.getElementById("result-label").innerText = "Resultado: " + label;
-                        });
-                    });
-                };
-                reader.readAsDataURL(file);
-            }
-        }
+    if (!modelLoaded) {
+        alert("⚠️ Por favor, espera a que el modelo termine de cargar.");
+        return;
+    }
+    const file = event.target.files[0];
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            img = loadImage(e.target.result, () => {
+                console.log("🖼️ Imagen cargada, clasificando...");
+                let imgCanvas = createGraphics(width, height);
+                imgCanvas.image(img, 0, 0, width, height);
+                classifier.classify(imgCanvas.elt, (param1, param2) => {
+                    let error, results;
+                    if (Array.isArray(param1)) {
+                        results = param1; // El primer parámetro es el array de resultados
+                        error = null;
+                    } else {
+                        error = param1;   // El primer parámetro es un error
+                        results = param2; // El segundo parámetro serían los resultados (si los hay)
+                    }
+                    if (error) {
+                        console.error("❌ Error en la predicción de la imagen:", error);
+                        return;
+                    }
+                    let bestPrediction = results[0];
+                    label = `${bestPrediction.label} - ${(bestPrediction.confidence * 100).toFixed(2)}%`;
+                    document.getElementById("result-label").innerText = "Resultado: " + label;
+                });
+            });
+        };
+        reader.readAsDataURL(file);
+    }
+    }
     </script>
 </body>
 </html>
